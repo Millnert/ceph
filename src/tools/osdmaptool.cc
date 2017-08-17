@@ -34,6 +34,7 @@ void usage()
   cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
   cout << "   --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds" << std::endl;
   cout << "   --health                dump health checks" << std::endl;
+  cout << "   --undestroy             mark all osds as not destroyed" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --with-default-pool     include default pool when creating map" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
@@ -115,6 +116,7 @@ int main(int argc, const char **argv)
   int range_first = -1;
   int range_last = -1;
   int pool = -1;
+  bool undestroy = false;
   bool mark_up_in = false;
   bool clear_temp = false;
   bool test_map_pgs = false;
@@ -173,6 +175,8 @@ int main(int argc, const char **argv)
       createpool = true;
     } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
       create_from_conf = true;
+    } else if (ceph_argparse_flag(args, i, "--undestroy", (char*)NULL)) {
+      undestroy = true;
     } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
       mark_up_in = true;
     } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
@@ -304,6 +308,15 @@ int main(int argc, const char **argv)
 	g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
     } else {
       osdmap.build_simple(g_ceph_context, 0, fsid, num_osd);
+    }
+    modified = true;
+  }
+
+  if (undestroy) {
+    cout << "marking all OSDs as undestroyed" << std::endl;
+    int n = osdmap.get_max_osd();
+    for (int i=0; i<n; i++) {
+      osdmap.set_state(i, osdmap.get_state(i) & ~CEPH_OSD_DESTROYED);
     }
     modified = true;
   }
