@@ -34,6 +34,7 @@ void usage()
   cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
   cout << "   --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds" << std::endl;
   cout << "   --health                dump health checks" << std::endl;
+  cout << "   --no-inc-epoch          do not bump epoch" << std::endl;
   cout << "   --undestroy             mark all osds as not destroyed" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --with-default-pool     include default pool when creating map" << std::endl;
@@ -116,6 +117,7 @@ int main(int argc, const char **argv)
   int range_first = -1;
   int range_last = -1;
   int pool = -1;
+  bool no_inc_epoch = false;
   bool undestroy = false;
   bool mark_up_in = false;
   bool clear_temp = false;
@@ -175,6 +177,8 @@ int main(int argc, const char **argv)
       createpool = true;
     } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
       create_from_conf = true;
+    } else if (ceph_argparse_flag(args, i, "--no-inc-epoch", (char*)NULL)) {
+      no_inc_epoch = true;
     } else if (ceph_argparse_flag(args, i, "--undestroy", (char*)NULL)) {
       undestroy = true;
     } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
@@ -635,7 +639,7 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  if (modified)
+  if (modified && !no_inc_epoch)
     osdmap.inc_epoch();
 
   if (health) {
