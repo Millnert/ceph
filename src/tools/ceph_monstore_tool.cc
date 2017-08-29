@@ -218,6 +218,7 @@ void usage(const char *n, po::options_description &d)
   << "                                  (random-gen -- --help for more info)\n"
   << "  rewrite-crush [-- options]      add a rewrite commit to the store\n"
   << "                                  (rewrite-crush -- --help for more info)\n"
+  << "  remove-destroyed                clear destroyed flag on osds\n"
   << "  inflate-pgmap [-- options]      add given number of pgmaps to store\n"
   << "                                  (inflate-pgmap -- --help for more info)\n"
   << "  rebuild                         rebuild store\n"
@@ -391,6 +392,73 @@ int rewrite_transaction(MonitorDBStore& store, int version,
   return 0;
 }
 
+/**
+ * Clone last osdmap epoch to +1 and remove all OSD DELETED flags in it
+ *
+ *
+ **/
+int remove_destroyed(const char* progname,
+		  vector<string>& subcmds,
+		  MonitorDBStore& store) {
+  string crush_file;
+
+  //MonitorDBStore::Transaction* t;
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
+
+  // Load latest osdmap from Store
+  const string prefix("osdmap");
+  version_t last_committed = store.get(prefix, "last_committed");
+  bufferlist bl;
+  int r = store.get(prefix, store.combine_strings("full", last_committed), bl);
+  if (r) {
+    std::cerr << "Error getting map: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  OSDMap osdmap;
+  osdmap.decode(bl);
+
+  // increase epoch
+  cout << "Increasing osdmap epoch from " << osdmap.get_epoch() << " to ";
+  osdmap.inc_epoch();
+  cout << osdmap.get_epoch() << std::endl;
+
+  // make the changes to the osdmap state
+  int n = osdmap.get_max_osd();
+  for (int i=0; i<n; i++) {
+    unsigned s = osdmap.get_state(i) & ~CEPH_OSD_DESTROYED;
+    osdmap.set_state(i, s);
+    cout << "Set osd " << i << " state from " <<
+      osdmap.get_state(i) << " to " << s << std::endl;
+  }
+
+  // encode the osdmap and append it to the store
+  bl.clear();
+  osdmap.encode(bl, CEPH_FEATURES_ALL|CEPH_FEATURE_RESERVED);
+  t->put(prefix, store.combine_strings("full", osdmap.get_epoch()), bl);
+  t->put(prefix, store.combine_strings("full", "latest"), osdmap.get_epoch());
+  t->put(prefix, "last_committed", osdmap.get_epoch());
+
+  cout << "put to transaction complete" << std::endl;
+
+  // XXX: not necessary to do incremental roundabout way
+  // copy previous osdmap into incremental (epoch +1)
+  /*
+  OSDMap::Incremental inc;
+  inc.epoch = osdmap.get_epoch();
+  inc.fsid = osdmap.get_fsid();
+
+  // here we add our TEMPORARY code to clear all destroyed bits
+  int n = osdmap.get_max_osd();
+  for (int i=0; i<n; i++) {
+    inc.new_state[i] = osdmap.get_state(i) & ~CEPH_OSD_DESTROYED;
+    cout << "Set osd " << i << " state from " << osdmap.get_state(i) << " to " << inc.new_state[i] << std::endl;
+  }
+  */
+
+  store.apply_transaction(t);
+  cout << "transaction applied" << std::endl;
+  return 0;
+}
 /**
  * create a new paxos version which carries a proposal to rewrite all epochs
  * of incremental and full map of "osdmap" after a faulty crush map is injected.
@@ -1273,6 +1341,8 @@ int main(int argc, char **argv) {
               << std::endl;
   } else if (cmd == "rewrite-crush") {
     err = rewrite_crush(argv[0], subcmds, st);
+  } else if (cmd == "remove-deleted") {
+    err = remove_destroyed(argv[0], subcmds, st);
   } else if (cmd == "inflate-pgmap") {
     unsigned n = 2000;
     bool can_be_trimmed = false;
