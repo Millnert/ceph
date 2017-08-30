@@ -440,21 +440,6 @@ int remove_destroyed(const char* progname,
 
   cout << "put to transaction complete" << std::endl;
 
-  // XXX: not necessary to do incremental roundabout way
-  // copy previous osdmap into incremental (epoch +1)
-  /*
-  OSDMap::Incremental inc;
-  inc.epoch = osdmap.get_epoch();
-  inc.fsid = osdmap.get_fsid();
-
-  // here we add our TEMPORARY code to clear all destroyed bits
-  int n = osdmap.get_max_osd();
-  for (int i=0; i<n; i++) {
-    inc.new_state[i] = osdmap.get_state(i) & ~CEPH_OSD_DESTROYED;
-    cout << "Set osd " << i << " state from " << osdmap.get_state(i) << " to " << inc.new_state[i] << std::endl;
-  }
-  */
-
   store.apply_transaction(t);
   cout << "transaction applied" << std::endl;
   return 0;
